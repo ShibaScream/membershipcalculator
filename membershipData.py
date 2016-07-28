@@ -7,16 +7,16 @@ import sys
 import os
 
 # function to load and prep csv data
-def LoadData():
+def loadData():
 
     # these should be made more flexible so I can load any file
-    folder = r"C:\Users\daniel\scripts"
+    folder = r"C:\Users\daniel\scripts\membershipcalculator"
     inFile = r"testdata.csv"
-    outFile = r'membershipNumbers.csv'  #this is probably not needed right here?
+    # outFile = r'membershipNumbers.csv'  #this is probably not needed right here?
 
     inPath = os.path.join(folder, inFile)
 
-    outPath = os.path.join(folder, outFile)
+    # outPath = os.path.join(folder, outFile) # not used here
 
     df = pd.read_csv(inPath)
     
@@ -26,34 +26,44 @@ def LoadData():
     memIDCol = 'Membership ID'
 
     # make sure that dates are in right format and sort by transaction date
-    df[tDateCol] = pd.to_datetime(df[tDateCol])
-    df[eDateCol] = pd.to_datetime(df[eDateCol])
-    df = df.sort_values([tDateCol], ascending=False)
+    df[tDateCol] = pd.to_datetime(df[tDateCol], infer_datetime_format=True)
+    df[eDateCol] = pd.to_datetime(df[eDateCol], infer_datetime_format=True)
+    df = df.sort_values([tDateCol, memIDCol], ascending=[1, 1])
     
     # DEBUG
-    print (df.dtypes)
+    # print (df.head(10))
     
     return df
 
 # function to return a new csv with the number of memberships added and dropped by date
-def CalculateMembership(data):
-    
-    expirationDates = []
-    
-    # for each row in dataframe
-        
-        # check action -- if equals "drop" then break
-            
-        # else:
-        
-            # if 
+def calculateMembership(tdata):
 
+    beginDate = tdata['Transaction Date'].min()
+
+    endDate = tdata['Purchased Membership Expiration Date'].max()
+
+    # DEBUG
+
+    print('beginDate = ', beginDate)
+
+    print('endDate = ', endDate)
+
+    # create the new dataframe indexed with complete range of dates
+    dRange = pd.date_range(beginDate, endDate, freq='D')
+
+    # for each row in data dataframe
+
+        # check action -- if equals "drop" then break
+
+        # else:
+
+            # if
+
+    return 0
     
 # TESTING
-data = LoadData()
-
-
-
-#destPath = r'C:/Users/daniel/Desktop/'
+tdata = loadData()
+calculateMembership(tdata)
+# destPath = r'C:/Users/daniel/Desktop/'
 #
-#fullDestPath = os.path.join(destPath, newFile)
+# fullDestPath = os.path.join(destPath, newFile)
