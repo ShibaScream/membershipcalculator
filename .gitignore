@@ -39,3 +39,4 @@ Thumbs.db
 # Special File for this Project #
 ######################
 *.idea/
+*.csv
