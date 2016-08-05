@@ -39,21 +39,14 @@ class MembershipCalc (object):
 
         end_date = self.df[self.e_date_col].max()
 
-        # DEBUG
-        # print('beginDate = ', begin_date)
-        # print('endDate = ', end_date)
-
         # create the new dataframe indexed with complete range of dates
-        d_range = pd.date_range(begin_date, end_date, freq='MS', name='Date')
+        d_range = pd.date_range(begin_date, end_date, freq='D', name='Date')
         self.final_count = pd.DataFrame(index=d_range)
 
         # add a column for each member program and set default value to 0
         self.membership_programs = self.df[self.mem_program_col].unique()
         for program in self.membership_programs:
             self.final_count[program] = 0
-
-        # DEBUG
-        print(self.df[self.action_col].unique())
 
         return 0
 
@@ -139,17 +132,16 @@ class MembershipCalc (object):
                     prev_e_date = current_t_date
                 else:
                     prev_e_date = current_e_date
-        # DEBUG
-        # print(self.final_count)
 
         return 0
 
     def export_data(self):
+        self.df.to_csv(os.path.join(self.folder, r'debugData.csv'))
         self.final_count.to_csv(self.outPath)
 
 # TESTING
 data = MembershipCalc()
 data.load_data()
-# data.calculate_membership()
+data.calculate_membership()
 data.export_data()
 
