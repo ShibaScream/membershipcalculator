@@ -2,6 +2,8 @@
 
 import pandas as pd
 
+from pandas.tseries.offsets import MonthBegin
+
 # improve portability
 import os
 
@@ -39,8 +41,8 @@ class MembershipCalc (object):
 
         end_date = self.df[self.e_date_col].max()
 
-        # create the new dataframe indexed with complete range of dates
-        d_range = pd.date_range(begin_date, end_date, freq='D', name='Date')
+        # create the new dataframe indexed with complete range of dates (using a frequency of Month Start)
+        d_range = pd.date_range(begin_date, end_date, freq='MS', name='Date')
         self.final_count = pd.DataFrame(index=d_range)
 
         # add a column for each member program and set default value to 0
@@ -61,8 +63,8 @@ class MembershipCalc (object):
             action = row[self.action_col]
             current_member = row[self.mem_id_col]
             current_program = row[self.mem_program_col]
-            current_t_date = row[self.t_date_col]
-            current_e_date = row[self.e_date_col]
+            current_t_date = pd.Timestamp(row[self.t_date_col]) - MonthBegin(n=1)
+            current_e_date = pd.Timestamp(row[self.e_date_col]) + MonthBegin(n=1)
 
             try:
                 # New member check
