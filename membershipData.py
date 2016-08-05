@@ -1,5 +1,3 @@
-# NEED TO INCORPORATE THIS http://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases
-
 import pandas as pd
 
 from pandas.tseries.offsets import MonthBegin
@@ -19,6 +17,7 @@ class MembershipCalc (object):
         self.e_date_col = 'Purchased Membership Expiration Date'
         self.mem_id_col = 'Membership ID'
         self.action_col = 'Action'
+        self.refund_status_col = 'Refund Status'
         self.mem_program_col = 'Membership Program'
         self.membership_programs = None
         self.df = None
@@ -33,6 +32,8 @@ class MembershipCalc (object):
         self.df[self.t_date_col] = pd.to_datetime(self.df[self.t_date_col], infer_datetime_format=True)
         self.df[self.e_date_col] = pd.to_datetime(self.df[self.e_date_col], infer_datetime_format=True)
         self.df = self.df.sort_values([self.mem_id_col, self.t_date_col, self.action_col], ascending=[1, 1, 0])
+
+        self.df[self.refund_status_col] = pd.to_numeric(self.df[self.refund_status_col], errors='coerce')
 
         # convert membership id to string
         self.df[self.mem_id_col].apply(str)
@@ -52,7 +53,7 @@ class MembershipCalc (object):
 
         return 0
 
-    # function to return a new csv with the number of memberships added and dropped by date
+    # function to return the new final_count dataframe with the number of memberships added and dropped by date
     def calculate_membership(self):
 
         # for each row in data dataframe
@@ -63,16 +64,23 @@ class MembershipCalc (object):
             action = row[self.action_col]
             current_member = row[self.mem_id_col]
             current_program = row[self.mem_program_col]
-            current_t_date = pd.Timestamp(row[self.t_date_col]) - MonthBegin(n=1)
+            current_t_date = pd.Timestamp(row[self.t_date_col]) - MonthBegin(n=0)
             current_e_date = pd.Timestamp(row[self.e_date_col]) + MonthBegin(n=1)
+            refund_status = row[self.refund_status_col]
 
             try:
+                # If transaction is refunded, skip
+                if refund_status == 1 or refund_status == 2:
+                    # # DEBUG
+                    # print('Found a refund!')
+                    continue
+
                 # New member check
                 if current_member != prev_member:
 
                     if action == 'Drop':
-                        # DEBUG statement
-                        print('member\'s only action was \'drop\'! Member: ', current_member)
+                        # # DEBUG statement
+                        # print('member\'s only action was \'drop\'! Member: ', current_member)
 
                         # reset for next row and continue
                         prev_member = current_member
@@ -103,12 +111,16 @@ class MembershipCalc (object):
                     self.final_count.ix[current_e_date, current_program] -= 1
 
                 elif action == 'Drop':
-                    # 'delete' previous expiration date count
-                    self.final_count.ix[prev_e_date, current_program] += 1
+                    # fix issue with
+                    if current_t_date < prev_e_date:
+                        # 'delete' previous expiration date count
+                        self.final_count.ix[prev_e_date, current_program] += 1
 
-                    # set new expiration date on transaction date of drop
-                    # subtract on new expiration date
-                    self.final_count.ix[current_t_date, current_program] -= 1
+                        # set new expiration date on transaction date of drop
+                        # subtract on new expiration date
+                        self.final_count.ix[current_t_date, current_program] -= 1
+                    else:
+                        current_e_date = prev_e_date
 
                 # else for 'Join' action
                 else:
@@ -129,7 +141,7 @@ class MembershipCalc (object):
             else:
                 # reset for next row and continue
                 prev_member = current_member
-                # if action = drop, there's no current_e_date, otherwise use that
+                # if action = drop, there's no current_e_date, otherwise use current
                 if pd.isnull(current_e_date):
                     prev_e_date = current_t_date
                 else:
