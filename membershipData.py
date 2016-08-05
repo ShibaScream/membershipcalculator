@@ -1,3 +1,5 @@
+# NEED TO INCORPORATE THIS http://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases
+
 import pandas as pd
 
 # improve portability
