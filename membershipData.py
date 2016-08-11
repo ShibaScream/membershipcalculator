@@ -9,7 +9,7 @@ import os
 class MembershipCalc (object):
     def __init__(self):
         self.folder = r'C:\Users\daniel\scripts\membershipcalculator'
-        self.in_file = r'testdata.csv'
+        self.in_file = r'memberData.csv'
         self.out_file = r'membershipNumbers.csv'
         self.in_path = os.path.join(self.folder, self.in_file)
         self.outPath = os.path.join(self.folder, self.out_file)
@@ -21,6 +21,7 @@ class MembershipCalc (object):
         self.mem_program_col = 'Membership Program'
         self.membership_programs = None
         self.df = None
+        self.dates = None
         self.final_count = None
 
     # function to load and prep csv data
@@ -45,6 +46,10 @@ class MembershipCalc (object):
         # create the new dataframe indexed with complete range of dates (using a frequency of Month Start)
         d_range = pd.date_range(begin_date, end_date, freq='MS', name='Date')
         self.final_count = pd.DataFrame(index=d_range)
+
+        # this is purely to create a csv of dates to use in tableau
+        d_range = pd.date_range(begin_date, end_date, freq='D', name='Date')
+        self.dates = pd.DataFrame(index=d_range)
 
         # add a column for each member program and set default value to 0
         self.membership_programs = self.df[self.mem_program_col].unique()
@@ -152,6 +157,7 @@ class MembershipCalc (object):
     def export_data(self):
         self.df.to_csv(os.path.join(self.folder, r'debugData.csv'))
         self.final_count.to_csv(self.outPath)
+        self.dates.to_csv(os.path.join(self.folder, r'dates.csv'))
 
 # TESTING
 data = MembershipCalc()
