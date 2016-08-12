@@ -7,7 +7,7 @@ import os
 
 
 class MembershipCalc (object):
-    def __init__(self):
+    def __init__(self, freq='MS'):
         self.folder = r'C:\Users\daniel\scripts\membershipcalculator'
         self.in_file = r'memberData.csv'
         self.out_file = r'membershipNumbers.csv'
@@ -19,10 +19,12 @@ class MembershipCalc (object):
         self.action_col = 'Action'
         self.refund_status_col = 'Refund Status'
         self.mem_program_col = 'Membership Program'
-        self.membership_programs = None
+        self.membership_programs = []
+        self.totals_col = []
         self.df = None
         self.dates = None
         self.final_count = None
+        self.frequency = freq
 
     # function to load and prep csv data
     def load_data(self):
@@ -44,17 +46,23 @@ class MembershipCalc (object):
         end_date = self.df[self.e_date_col].max()
 
         # create the new dataframe indexed with complete range of dates (using a frequency of Month Start)
-        d_range = pd.date_range(begin_date, end_date, freq='MS', name='Date')
+        d_range = pd.date_range(begin_date, end_date, freq=self.frequency, name='Date')
         self.final_count = pd.DataFrame(index=d_range)
 
         # this is purely to create a csv of dates to use in tableau
         d_range = pd.date_range(begin_date, end_date, freq='D', name='Date')
         self.dates = pd.DataFrame(index=d_range)
 
-        # add a column for each member program and set default value to 0
+        # add program-specific columns and set default values to 0
         self.membership_programs = self.df[self.mem_program_col].unique()
         for program in self.membership_programs:
+            total = str(program) + "_running_total"
+            self.totals_col.append(total)
             self.final_count[program] = 0
+            self.final_count[total] = 0
+
+        print(self.membership_programs)
+        print(self.totals_col)
 
         return 0
 
@@ -69,8 +77,14 @@ class MembershipCalc (object):
             action = row[self.action_col]
             current_member = row[self.mem_id_col]
             current_program = row[self.mem_program_col]
-            current_t_date = pd.Timestamp(row[self.t_date_col]) - MonthBegin(n=0)
-            current_e_date = pd.Timestamp(row[self.e_date_col]) + MonthBegin(n=1)
+
+            if self.frequency == 'MS':
+                current_t_date = pd.Timestamp(row[self.t_date_col]) - MonthBegin(n=0)
+                current_e_date = pd.Timestamp(row[self.e_date_col]) + MonthBegin(n=1)
+            else:
+                current_t_date = pd.Timestamp(row[self.t_date_col])
+                current_e_date = pd.Timestamp(row[self.e_date_col])
+
             refund_status = row[self.refund_status_col]
 
             try:
@@ -154,14 +168,27 @@ class MembershipCalc (object):
 
         return 0
 
+    def calculate_running_total(self):
+
+        fill_val = [0 for x in range(len(self.totals_col))]
+
+        totals = dict(zip(self.totals_col, fill_val))
+
+        print(totals)
+
+        for index, row in self.final_count.iterrows():
+            for i, total in enumerate(self.totals_col):
+                totals[total] += row[self.membership_programs[i]]
+                row[total] = totals[total]
+
     def export_data(self):
         self.df.to_csv(os.path.join(self.folder, r'debugData.csv'))
         self.final_count.to_csv(self.outPath)
         self.dates.to_csv(os.path.join(self.folder, r'dates.csv'))
 
-# TESTING
-data = MembershipCalc()
+
+data = MembershipCalc('D')
 data.load_data()
 data.calculate_membership()
+data.calculate_running_total()
 data.export_data()
-
