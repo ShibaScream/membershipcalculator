@@ -25,6 +25,11 @@ class MembershipCalc (object):
         self.dates = None
         self.final_count = None
         self.frequency = freq
+        self.dropped = "_dropped"
+        self.lapsed = "_lapsed"
+        self.joined_rejoined = "_joined_rejoined"
+        self.renewed = "_renewed"
+        self.member_check = []
 
     # function to load and prep csv data
     def load_data(self):
@@ -60,6 +65,10 @@ class MembershipCalc (object):
             self.totals_col.append(total)
             self.final_count[program] = 0
             self.final_count[total] = 0
+            self.final_count[str(program) + self.dropped] = 0
+            self.final_count[str(program) + self.lapsed] = 0
+            self.final_count[str(program) + self.joined_rejoined] = 0
+            self.final_count[str(program) + self.renewed] = 0
 
         print(self.membership_programs)
         print(self.totals_col)
@@ -72,6 +81,7 @@ class MembershipCalc (object):
         # for each row in data dataframe
         prev_member = None
         prev_e_date = None
+        prev_t_refund = False
 
         for index, row in self.df.iterrows():
             action = row[self.action_col]
@@ -79,7 +89,9 @@ class MembershipCalc (object):
             current_program = row[self.mem_program_col]
 
             if self.frequency == 'MS':
-                current_t_date = pd.Timestamp(row[self.t_date_col]) - MonthBegin(n=0)
+                current_t_date = pd.Timestamp(row[self.t_date_col])
+                if current_t_date.day != 1:
+                    current_t_date = current_t_date - MonthBegin(n=1)
                 current_e_date = pd.Timestamp(row[self.e_date_col]) + MonthBegin(n=1)
             else:
                 current_t_date = pd.Timestamp(row[self.t_date_col])
@@ -92,27 +104,27 @@ class MembershipCalc (object):
                 if refund_status == 1 or refund_status == 2:
                     # # DEBUG
                     # print('Found a refund!')
+                    prev_t_refund = True
+                    prev_member = current_member
+                    prev_e_date = current_e_date
                     continue
 
                 # New member check
                 if current_member != prev_member:
 
                     if action == 'Drop':
-                        # # DEBUG statement
-                        # print('member\'s only action was \'drop\'! Member: ', current_member)
-
+                        # DEBUG statement
+                        print('member\'s only action was \'drop\'! Member: ', current_member)
                         # reset for next row and continue
                         prev_member = current_member
                         prev_e_date = current_e_date
-
                         continue
 
                     elif action != 'Join':
                         # assume that data is sorted, force this to be their 'join'
                         action = 'Join'
 
-                # Handle "upgrade" and "downgrade" actions
-                # Only check this if not a new member
+                # Handle "upgrade" and "downgrade" actions -- Only check this if not a new member
                 elif action == 'Upgrade' or action == 'Downgrade':
                     # if transaction date is BEFORE current expiration, treat as renewal
                     if current_t_date < prev_e_date:
@@ -124,30 +136,42 @@ class MembershipCalc (object):
                 if action == 'Renew':
                     # 'delete' previous expiration date count
                     self.final_count.ix[prev_e_date, current_program] += 1
-
-                    # set expiration date to new expiration date
+                    # remove from lapsed count on previous expiration date
+                    self.final_count.ix[prev_e_date, (current_program + self.lapsed)] -= 1
                     # subtract on new expiration date
                     self.final_count.ix[current_e_date, current_program] -= 1
+                    # add to lapsed count on new expiration date
+                    self.final_count.ix[current_e_date, (current_program + self.lapsed)] += 1
+                    # add to renewed count
+                    self.final_count.ix[current_t_date, (current_program + self.renewed)] += 1
+
+                    self.export_member(current_t_date, current_member, action)
 
                 elif action == 'Drop':
-                    # fix issue with
-                    if current_t_date < prev_e_date:
+                    # add to dropped count (note that we don't double count dropped as lapsed)
+                    self.final_count.ix[current_t_date, (current_program + self.dropped)] += 1
+
+                    if (current_t_date <= prev_e_date) & (prev_t_refund is False):
                         # 'delete' previous expiration date count
                         self.final_count.ix[prev_e_date, current_program] += 1
-
                         # set new expiration date on transaction date of drop
-                        # subtract on new expiration date
                         self.final_count.ix[current_t_date, current_program] -= 1
                     else:
+                        prev_t_refund = False
                         current_e_date = prev_e_date
 
-                # else for 'Join' action
+                # else for 'Join' type action (includes rejoins)
                 else:
                     # add on transaction date
                     self.final_count.ix[current_t_date, current_program] += 1
-
                     # subtract on expiration date
                     self.final_count.ix[current_e_date, current_program] -= 1
+                    # add to lapsed count
+                    self.final_count.ix[current_e_date, (current_program + self.lapsed)] += 1
+                    # add to joined/rejoined count
+                    self.final_count.ix[current_t_date, (current_program + self.joined_rejoined)] += 1
+
+                    self.export_member(current_t_date, current_member, action)
 
             except Exception as inst:
                 print('Member: ', current_member,
@@ -160,7 +184,7 @@ class MembershipCalc (object):
             else:
                 # reset for next row and continue
                 prev_member = current_member
-                # if action = drop, there's no current_e_date, otherwise use current
+                # if action = drop, there's sometimes no current_e_date, otherwise use current
                 if pd.isnull(current_e_date):
                     prev_e_date = current_t_date
                 else:
@@ -186,8 +210,16 @@ class MembershipCalc (object):
         self.final_count.to_csv(self.outPath)
         self.dates.to_csv(os.path.join(self.folder, r'dates.csv'))
 
+        if self.member_check:
+            export = pd.DataFrame(self.member_check, columns=['member ID', 'action'])
+            export.to_csv(os.path.join(self.folder, r'member_check.csv'))
 
-data = MembershipCalc('D')
+    def export_member(self, t_date, member, action):
+        check_date = pd.Timestamp('4/1/1988') - MonthBegin(n=0)
+        if t_date == check_date:
+            self.member_check.append((member, action))
+
+data = MembershipCalc('MS')
 data.load_data()
 data.calculate_membership()
 data.calculate_running_total()
